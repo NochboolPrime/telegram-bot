@@ -15,11 +15,11 @@ func FormatProfile(p *models.Profile) string {
 		"Инвентарь: %s\n"+
 		"Ранг: %s\n"+
 		"Команда: %s\n"+
+		"Раса: %s\n"+
 		"Пиастры: %d\n"+
-		"Обломки: %d\n"+
-		"Посещаемость: %d",
+		"Обломки: %d",
 		p.Name, p.Age, p.Height, p.Weight,
-		p.Inventory, p.Rank, p.Team, p.Piastres, p.Oblomki, p.AttendanceCount)
+		p.Inventory, p.Rank, p.Team, p.Race, p.Piastres, p.Oblomki)
 }
 
 // FormatProfileAdmin – форматирует анкету для администратора,
@@ -33,9 +33,9 @@ func FormatProfileAdmin(p *models.Profile) string {
 		"Инвентарь: %s\n"+
 		"Ранг: %s\n"+
 		"Команда: %s\n"+
+		"Раса: %s\n"+
 		"Пиастры: %d\n"+
-		"Обломки: %d\n"+
-		"Посещаемость: %d",
+		"Обломки: %d",
 		p.ID, p.Username, p.Name, p.Age, p.Height, p.Weight,
-		p.Inventory, p.Rank, p.Team, p.Piastres, p.Oblomki, p.AttendanceCount)
+		p.Inventory, p.Rank, p.Team, p.Race, p.Piastres, p.Oblomki)
 }

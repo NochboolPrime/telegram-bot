@@ -21,22 +21,22 @@ func InitDB() {
 	}
 
 	query := `
-    CREATE TABLE IF NOT EXISTS profiles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        telegram_id INTEGER UNIQUE,
-        username TEXT,
-        name TEXT,
-        age INTEGER,
-        height REAL,
-        weight REAL,
-        inventory TEXT,
-        photo TEXT,
-        rank TEXT,
-        team TEXT,
-        piastres INTEGER,
-        oblomki INTEGER,
-        attendance_count INTEGER
-    );`
+CREATE TABLE IF NOT EXISTS profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id INTEGER UNIQUE,
+    username TEXT,
+    name TEXT,
+    age INTEGER,
+    height REAL,
+    weight REAL,
+    inventory TEXT,
+    photo TEXT,
+    rank TEXT,
+    team TEXT,
+    race TEXT,
+    piastres INTEGER,
+    oblomki INTEGER
+);`
 
 	_, err = DB.Exec(query)
 	if err != nil {
@@ -47,13 +47,13 @@ func InitDB() {
 // GetProfile извлекает профиль по telegram_id.
 func GetProfile(telegramID int64) (*models.Profile, error) {
 	query := `
-    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, piastres, oblomki, attendance_count 
+    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, race, piastres, oblomki
     FROM profiles WHERE telegram_id = ?`
 	row := DB.QueryRow(query, telegramID)
 
 	var p models.Profile
 	err := row.Scan(&p.ID, &p.TelegramID, &p.Username, &p.Name, &p.Age, &p.Height, &p.Weight,
-		&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Piastres, &p.Oblomki, &p.AttendanceCount)
+		&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Race, &p.Piastres, &p.Oblomki)
 	if err != nil {
 		return nil, err
 	}
@@ -63,13 +63,13 @@ func GetProfile(telegramID int64) (*models.Profile, error) {
 // GetProfileByID извлекает профиль по уникальному номеру (ID).
 func GetProfileByID(id int) (*models.Profile, error) {
 	query := `
-    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, piastres, oblomki, attendance_count
+    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, race, piastres, oblomki
     FROM profiles WHERE id = ?`
 	row := DB.QueryRow(query, id)
 
 	var p models.Profile
 	err := row.Scan(&p.ID, &p.TelegramID, &p.Username, &p.Name, &p.Age, &p.Height, &p.Weight,
-		&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Piastres, &p.Oblomki, &p.AttendanceCount)
+		&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Race, &p.Piastres, &p.Oblomki)
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +79,10 @@ func GetProfileByID(id int) (*models.Profile, error) {
 // CreateProfile вставляет новый профиль в базу.
 func CreateProfile(p *models.Profile) error {
 	query := `
-    INSERT INTO profiles (telegram_id, username, name, age, height, weight, inventory, photo, rank, team, piastres, oblomki, attendance_count)
+    INSERT INTO profiles (telegram_id, username, name, age, height, weight, inventory, photo, rank, team, race, piastres, oblomki)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	res, err := DB.Exec(query, p.TelegramID, p.Username, p.Name, p.Age, p.Height, p.Weight,
-		p.Inventory, p.Photo, p.Rank, p.Team, p.Piastres, p.Oblomki, p.AttendanceCount)
+		p.Inventory, p.Photo, p.Rank, p.Team, p.Race, p.Piastres, p.Oblomki)
 	if err != nil {
 		log.Printf("Ошибка вставки профиля: %v", err)
 		return err
@@ -98,10 +98,11 @@ func CreateProfile(p *models.Profile) error {
 // UpdateProfile обновляет данные профиля.
 func UpdateProfile(p *models.Profile) error {
 	query := `
-    UPDATE profiles SET username = ?, name = ?, age = ?, height = ?, weight = ?, inventory = ?, photo = ?, rank = ?, team = ?, piastres = ?, oblomki = ?, attendance_count = ?
+    UPDATE profiles SET username = ?, name = ?, age = ?, height = ?, weight = ?,
+    inventory = ?, photo = ?, rank = ?, team = ?, race = ?, piastres = ?, oblomki = ?
     WHERE telegram_id = ?`
 	_, err := DB.Exec(query, p.Username, p.Name, p.Age, p.Height, p.Weight, p.Inventory,
-		p.Photo, p.Rank, p.Team, p.Piastres, p.Oblomki, p.AttendanceCount, p.TelegramID)
+		p.Photo, p.Rank, p.Team, p.Race, p.Piastres, p.Oblomki, p.TelegramID)
 	return err
 }
 
@@ -121,7 +122,7 @@ func SaveProfile(p *models.Profile) error {
 // GetAllProfiles возвращает все профили.
 func GetAllProfiles() ([]*models.Profile, error) {
 	query := `
-    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, piastres, oblomki, attendance_count
+    SELECT id, telegram_id, username, name, age, height, weight, inventory, photo, rank, team, race, piastres, oblomki
     FROM profiles`
 	rows, err := DB.Query(query)
 	if err != nil {
@@ -133,8 +134,9 @@ func GetAllProfiles() ([]*models.Profile, error) {
 	for rows.Next() {
 		var p models.Profile
 		err = rows.Scan(&p.ID, &p.TelegramID, &p.Username, &p.Name, &p.Age, &p.Height, &p.Weight,
-			&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Piastres, &p.Oblomki, &p.AttendanceCount)
+			&p.Inventory, &p.Photo, &p.Rank, &p.Team, &p.Race, &p.Piastres, &p.Oblomki)
 		if err != nil {
+			// можно добавить логирование ошибки
 			log.Printf("Ошибка Scan: %v", err)
 			continue
 		}

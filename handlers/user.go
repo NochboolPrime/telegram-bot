@@ -21,6 +21,7 @@ const (
 	StepPhoto
 	StepRank
 	StepTeam
+	StepRace // новый шаг: ввод расы
 	StepCompleted
 )
 
@@ -136,18 +137,23 @@ func HandleRegistrationConversation(bot *tgbotapi.BotAPI, msg *tgbotapi.Message,
 		SendMessage(bot, chatID, "Введите вашу команду:")
 	case StepTeam:
 		state.Profile.Team = text
+		state.CurrentStep = StepRace
+		SendMessage(bot, chatID, "Введите вашу расу:")
+	case StepRace:
+		state.Profile.Race = text
 		state.CurrentStep = StepCompleted
 
+		// Сохраняем профиль без поля посещаемость.
 		err := db.SaveProfile(state.Profile)
 		if err != nil {
 			log.Printf("Ошибка сохранения профиля для telegram_id %d: %v", msg.From.ID, err)
 			SendMessage(bot, chatID, "Ошибка сохранения профиля. Попробуйте снова. (Ошибка: "+err.Error()+")")
 		} else {
 			SendMessage(bot, chatID, "Профиль успешно создан!")
-			// Для пользователя используем форматирование без ID и TG username.
+			// Отправляем информацию пользователю без внутренних данных
 			userProfileText := utils.FormatProfile(state.Profile)
 			SendMessage(bot, chatID, userProfileText)
-			// Полная информация (для администратора) отправляется второму боту.
+			// Полная информация (с ID и TG) отправляется второму админскому боту
 			SendProfileToSecondBot(state.Profile)
 		}
 		delete(registrationStates, msg.From.ID)

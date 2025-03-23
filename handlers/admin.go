@@ -144,7 +144,7 @@ func HandleEventCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery)
 	} else if currentEvent.CurrencyType == "oblomki" || currentEvent.CurrencyType == "обломки" {
 		profile.Oblomki += currentEvent.Amount
 	}
-	profile.AttendanceCount++
+
 	db.SaveProfile(profile)
 
 	answer := tgbotapi.NewCallback(callback.ID, "Вы успешно отметились!")

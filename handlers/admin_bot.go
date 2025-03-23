@@ -52,7 +52,8 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			"/allprofiles - показать список всех анкет (ID, TG username)\n" +
 			"/viewprofile <ID> - просмотр анкеты по ID\n" +
 			"/editprofile <ID> <поле> <значение> - редактирование анкеты\n" +
-			"/deleteprofilebyid <ID> - удаление анкеты по ID"
+			"/deleteprofilebyid <ID> - удаление анкеты по ID\n" +
+			"/addcurrency <ID> <тип валюты> <количество> - добавление валюты"
 		msg := tgbotapi.NewMessage(chatID, helpText)
 		bot.Send(msg)
 		return
@@ -98,7 +99,8 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		}
 		prompt := "Для просмотра анкеты отправьте команду: /viewprofile <ID>\n" +
 			"Для редактирования: /editprofile <ID> <поле> <значение>\n" +
-			"Для удаления: /deleteprofilebyid <ID>\n"
+			"Для удаления: /deleteprofilebyid <ID>\n" +
+			"Для добавления валюты:  /addcurrency <ID> <тип валюты> <количество>\n"
 		fullText := listText + "\n" + prompt
 		msg := tgbotapi.NewMessage(chatID, fullText)
 		bot.Send(msg)
@@ -221,8 +223,59 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			msg := tgbotapi.NewMessage(chatID, "Не удалось обновить анкету. Проверьте входные данные.")
 			bot.Send(msg)
 		}
+
+	case "addcurrency":
+		// Ожидается: /addcurrency <ID> <тип валюты> <количество>
+		parts := strings.Fields(args)
+		if len(parts) != 3 {
+			msg := tgbotapi.NewMessage(chatID, "Используйте корректный формат: /addcurrency <ID> <тип валюты> <количество>")
+			bot.Send(msg)
+			return
+		}
+		id, err := strconv.Atoi(parts[0])
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "Неверный ID анкеты.")
+			bot.Send(msg)
+			return
+		}
+		currency := strings.ToLower(parts[1])
+		amount, err := strconv.Atoi(parts[2])
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "Количество должно быть числом.")
+			bot.Send(msg)
+			return
+		}
+
+		profile, err := db.GetProfileByID(id)
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "Ошибка получения анкеты: "+err.Error())
+			bot.Send(msg)
+			return
+		}
+
+		switch currency {
+		case "piastres", "пиастры":
+			profile.Piastres += amount
+		case "oblomki", "обломки":
+			profile.Oblomki += amount
+		default:
+			msg := tgbotapi.NewMessage(chatID, "Неизвестный тип валюты. Используйте 'piastres' или 'oblomki'.")
+			bot.Send(msg)
+			return
+		}
+
+		err = db.UpdateProfile(profile)
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "Ошибка обновления анкеты: "+err.Error())
+			bot.Send(msg)
+			return
+		}
+		responseText := "Валюта успешно начислена.\nНовая сумма:\nПиастры: " + strconv.Itoa(profile.Piastres) +
+			"\nОбломки: " + strconv.Itoa(profile.Oblomki)
+		msg := tgbotapi.NewMessage(chatID, responseText)
+		bot.Send(msg)
 	default:
-		msg := tgbotapi.NewMessage(chatID, "Неизвестная команда. Доступны: /auth, /help, /allprofiles, /viewprofile, /editprofile, /deleteprofilebyid")
+		msg := tgbotapi.NewMessage(chatID, "Неизвестная команда. Доступны: /auth, /help, /allprofiles, /viewprofile, /editprofile, /deleteprofilebyid, /addcurrency")
 		bot.Send(msg)
 	}
 }
