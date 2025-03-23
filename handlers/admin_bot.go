@@ -24,66 +24,6 @@ func isAuthenticated(chatID int64) bool {
 	return authenticatedAdmins[chatID]
 }
 
-// HandleCreateEvent создает новое событие в базе данных.
-// Ожидаемый формат команды: /createevent <название|валюта|количество>
-func HandleCreateEvent(bot *tgbotapi.BotAPI, chatID int64, args string) {
-	parts := strings.Split(args, "|")
-	if len(parts) != 3 {
-		msg := tgbotapi.NewMessage(chatID, "Используйте формат команды: /createevent <название|валюта|количество>")
-		bot.Send(msg)
-		return
-	}
-
-	name := strings.TrimSpace(parts[0])
-	currency := strings.ToLower(strings.TrimSpace(parts[1]))
-	amount, err := strconv.Atoi(strings.TrimSpace(parts[2]))
-	if err != nil {
-		msg := tgbotapi.NewMessage(chatID, "Количество должно быть числом.")
-		bot.Send(msg)
-		return
-	}
-
-	// Создаем объект события
-	event := &models.Event{
-		Name:         name,
-		CurrencyType: currency,
-		Amount:       amount,
-		Active:       true,
-		CreatedAt:    time.Now(),
-	}
-
-	// Сохраняем событие в базе данных
-	err = db.CreateEvent(event)
-	if err != nil {
-		log.Printf("Ошибка создания события: %v", err)
-		msg := tgbotapi.NewMessage(chatID, "Ошибка создания события: "+err.Error())
-		bot.Send(msg)
-		return
-	}
-
-	log.Printf("Создано событие: ID=%d, Название=%s, Валюта=%s, Сумма=%d", event.ID, event.Name, event.CurrencyType, event.Amount)
-
-	// Уведомление для админа
-	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Событие создано: \"%s\" (ID: %d)", event.Name, event.ID))
-	bot.Send(msg)
-
-	// Отправляем уведомление всем пользователям
-	notifyText := fmt.Sprintf("Новое событие: \"%s\" (ID: %d)\n"+
-		"Для участия введите: /attend %d\n"+
-		"Для отказа: /unattend %d", event.Name, event.ID, event.ID, event.ID)
-
-	profiles, err := db.GetAllProfiles()
-	if err != nil {
-		log.Printf("Ошибка получения профилей для рассылки: %v", err)
-		return
-	}
-
-	for _, profile := range profiles {
-		notification := tgbotapi.NewMessage(profile.TelegramID, notifyText)
-		bot.Send(notification)
-	}
-}
-
 // authenticate выполняет аутентификацию: если предоставленный пароль совпадает с AdminPassword,
 // то chatID сохраняется как аутентифицированный.
 func authenticate(chatID int64, providedPassword string) bool {
@@ -345,6 +285,13 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			msg := tgbotapi.NewMessage(chatID, "Используйте формат команды: /createevent <название|валюта|количество>")
 			bot.Send(msg)
 			return
+		}
+
+		if PrimaryBot != nil {
+			// Используем PrimaryBot (пользовательский бот) для рассылки уведомления
+			HandleCreateEvent(PrimaryBot, update.Message)
+		} else {
+			log.Println("PrimaryBot не инициализирован")
 		}
 
 		name := strings.TrimSpace(parts[0])

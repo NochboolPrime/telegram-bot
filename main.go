@@ -21,6 +21,7 @@ func main() {
 	}
 	primaryBot.Debug = true
 	log.Printf("Пользовательский бот авторизован как: %s", primaryBot.Self.UserName)
+	handlers.PrimaryBot = primaryBot
 
 	// Инициализация админского бота
 	adminBotToken := "8051322387:AAG4pnS8hch0JHBWgVS1qLt12JQCjd_JyB0"

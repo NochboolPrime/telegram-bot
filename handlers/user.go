@@ -270,6 +270,7 @@ func SendMessage(bot *tgbotapi.BotAPI, chatID int64, text string) {
 
 // Declare AdminBot as a global variable
 var AdminBot *tgbotapi.BotAPI
+var PrimaryBot *tgbotapi.BotAPI
 
 // SendProfileToAdminBot отправляет профиль админскому боту.
 func SendProfileToAdminBot(profile *models.Profile) {
