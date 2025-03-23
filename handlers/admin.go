@@ -5,24 +5,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"telegram-bot/config"
 	"telegram-bot/db"
-	"telegram-bot/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-// Структура события начисления валюты
-type AttendanceEvent struct {
-	EventID      string
-	CurrencyType string // "piastres" или "oblomki"
-	Amount       int
-	Participants map[int64]bool
-}
-
-var currentEvent *AttendanceEvent
 
 // HandleModifyCurrency позволяет администратору изменять валюту у пользователя.
 // Формат команды: /modifycurrency <telegram_id> <currency> <amount>
@@ -70,115 +58,6 @@ func HandleModifyCurrency(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	}
 }
 
-// HandleStartEvent запускает событие начисления валюты.
-// Формат команды: /startevent <currency> <amount>
-func HandleStartEvent(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
-	if !config.IsAdmin(msg.From.ID) {
-		sendMessage(bot, msg.Chat.ID, "Нет прав!")
-		return
-	}
-	args := strings.Fields(msg.CommandArguments())
-	if len(args) != 2 {
-		sendMessage(bot, msg.Chat.ID, "Используйте: /startevent <currency> <amount>")
-		return
-	}
-	currency := strings.ToLower(args[0])
-	amount, err := strconv.Atoi(args[1])
-	if err != nil {
-		sendMessage(bot, msg.Chat.ID, "Amount должен быть числом")
-		return
-	}
-
-	eventID := fmt.Sprintf("%d", time.Now().Unix())
-	currentEvent = &AttendanceEvent{
-		EventID:      eventID,
-		CurrencyType: currency,
-		Amount:       amount,
-		Participants: make(map[int64]bool),
-	}
-
-	// Формируем inline‑клавиатуру с кнопкой «Я был»
-	button := tgbotapi.NewInlineKeyboardButtonData("Я был", "attend:"+eventID)
-	row := tgbotapi.NewInlineKeyboardRow(button)
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(row)
-
-	text := fmt.Sprintf("Начинается событие!\nНажмите на кнопку \"Я был\", чтобы получить %d %s.", amount, currency)
-	msgConfig := tgbotapi.NewMessage(msg.Chat.ID, text)
-	msgConfig.ReplyMarkup = keyboard
-	bot.Send(msgConfig)
-}
-
-// HandleEventCallback обрабатывает нажатие на кнопку «Я был»
-func HandleEventCallback(bot *tgbotapi.BotAPI, callback *tgbotapi.CallbackQuery) {
-	data := callback.Data
-	parts := strings.Split(data, ":")
-	if len(parts) < 2 {
-		return
-	}
-	eventID := parts[1]
-	if currentEvent == nil || currentEvent.EventID != eventID {
-		answer := tgbotapi.NewCallback(callback.ID, "Событие больше не активно.")
-		bot.Request(answer)
-		return
-	}
-
-	userID := callback.From.ID
-	if currentEvent.Participants[userID] {
-		answer := tgbotapi.NewCallback(callback.ID, "Вы уже отметились.")
-		bot.Request(answer)
-		return
-	}
-
-	currentEvent.Participants[userID] = true
-
-	profile, err := db.GetProfile(userID)
-	if err != nil || profile == nil {
-		answer := tgbotapi.NewCallback(callback.ID, "Профиль не найден. Зарегистрируйтесь через /start.")
-		bot.Request(answer)
-		return
-	}
-
-	// Начисляем валюту
-	if currentEvent.CurrencyType == "piastres" || currentEvent.CurrencyType == "пиастры" {
-		profile.Piastres += currentEvent.Amount
-	} else if currentEvent.CurrencyType == "oblomki" || currentEvent.CurrencyType == "обломки" {
-		profile.Oblomki += currentEvent.Amount
-	}
-
-	db.SaveProfile(profile)
-
-	answer := tgbotapi.NewCallback(callback.ID, "Вы успешно отметились!")
-	bot.Request(answer)
-
-	// Отправляем обновлённую анкету участника
-	profileText := utils.FormatProfile(profile)
-	sendMessage(bot, callback.Message.Chat.ID, profileText)
-}
-
-// HandleParticipants выводит список участников текущего события
-func HandleParticipants(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
-	if !config.IsAdmin(msg.From.ID) {
-		sendMessage(bot, msg.Chat.ID, "Нет прав!")
-		return
-	}
-	if currentEvent == nil {
-		sendMessage(bot, msg.Chat.ID, "Нет активного события.")
-		return
-	}
-
-	var result string
-	for userID := range currentEvent.Participants {
-		profile, err := db.GetProfile(userID)
-		if err == nil && profile != nil {
-			result += fmt.Sprintf("Имя: %s, TelegramID: %d\n", profile.Name, profile.TelegramID)
-		}
-	}
-	if result == "" {
-		result = "Нет участников."
-	}
-	sendMessage(bot, msg.Chat.ID, "Список участников:\n"+result)
-}
-
 // HandleCurrencyRanking выводит рейтинг по заданной валюте.
 // Формат команды: /currencyranking <currency>
 // Если параметр не указан, по умолчанию используется "piastres".
@@ -221,3 +100,6 @@ func HandleCurrencyRanking(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	}
 	sendMessage(bot, msg.Chat.ID, ranking)
 }
+
+// Вспомогательная функция для отправки сообщения.
+// Поскольку файлы находятся в одном пакете, функция доступна и в event.go.

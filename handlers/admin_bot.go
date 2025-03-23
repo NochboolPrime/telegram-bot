@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"telegram-bot/db"
+	"telegram-bot/models"
 	"telegram-bot/utils"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -21,6 +24,66 @@ func isAuthenticated(chatID int64) bool {
 	return authenticatedAdmins[chatID]
 }
 
+// HandleCreateEvent создает новое событие в базе данных.
+// Ожидаемый формат команды: /createevent <название|валюта|количество>
+func HandleCreateEvent(bot *tgbotapi.BotAPI, chatID int64, args string) {
+	parts := strings.Split(args, "|")
+	if len(parts) != 3 {
+		msg := tgbotapi.NewMessage(chatID, "Используйте формат команды: /createevent <название|валюта|количество>")
+		bot.Send(msg)
+		return
+	}
+
+	name := strings.TrimSpace(parts[0])
+	currency := strings.ToLower(strings.TrimSpace(parts[1]))
+	amount, err := strconv.Atoi(strings.TrimSpace(parts[2]))
+	if err != nil {
+		msg := tgbotapi.NewMessage(chatID, "Количество должно быть числом.")
+		bot.Send(msg)
+		return
+	}
+
+	// Создаем объект события
+	event := &models.Event{
+		Name:         name,
+		CurrencyType: currency,
+		Amount:       amount,
+		Active:       true,
+		CreatedAt:    time.Now(),
+	}
+
+	// Сохраняем событие в базе данных
+	err = db.CreateEvent(event)
+	if err != nil {
+		log.Printf("Ошибка создания события: %v", err)
+		msg := tgbotapi.NewMessage(chatID, "Ошибка создания события: "+err.Error())
+		bot.Send(msg)
+		return
+	}
+
+	log.Printf("Создано событие: ID=%d, Название=%s, Валюта=%s, Сумма=%d", event.ID, event.Name, event.CurrencyType, event.Amount)
+
+	// Уведомление для админа
+	msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Событие создано: \"%s\" (ID: %d)", event.Name, event.ID))
+	bot.Send(msg)
+
+	// Отправляем уведомление всем пользователям
+	notifyText := fmt.Sprintf("Новое событие: \"%s\" (ID: %d)\n"+
+		"Для участия введите: /attend %d\n"+
+		"Для отказа: /unattend %d", event.Name, event.ID, event.ID, event.ID)
+
+	profiles, err := db.GetAllProfiles()
+	if err != nil {
+		log.Printf("Ошибка получения профилей для рассылки: %v", err)
+		return
+	}
+
+	for _, profile := range profiles {
+		notification := tgbotapi.NewMessage(profile.TelegramID, notifyText)
+		bot.Send(notification)
+	}
+}
+
 // authenticate выполняет аутентификацию: если предоставленный пароль совпадает с AdminPassword,
 // то chatID сохраняется как аутентифицированный.
 func authenticate(chatID int64, providedPassword string) bool {
@@ -31,10 +94,7 @@ func authenticate(chatID int64, providedPassword string) bool {
 	return false
 }
 
-// Обратите внимание: команда /auth является всегда доступной,
-// а остальные команды требуют успешной аутентификации.
-
-// В начале функции HandleAdminUpdate проверим команду help независимо от аутентификации.
+// HandleAdminUpdate обрабатывает команды администраторского бота.
 func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 	if update.Message == nil || !update.Message.IsCommand() {
 		return
@@ -53,7 +113,8 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			"/viewprofile <ID> - просмотр анкеты по ID\n" +
 			"/editprofile <ID> <поле> <значение> - редактирование анкеты\n" +
 			"/deleteprofilebyid <ID> - удаление анкеты по ID\n" +
-			"/addcurrency <ID> <тип валюты> <количество> - добавление валюты"
+			"/addcurrency <ID> <тип валюты> <количество> - добавление валюты\n" +
+			"/createevent <название|валюта|сумма> - создание события\n"
 		msg := tgbotapi.NewMessage(chatID, helpText)
 		bot.Send(msg)
 		return
@@ -79,6 +140,7 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		return
 	}
 
+	// Обработка других команд
 	switch cmd {
 	case "allprofiles":
 		profiles, err := db.GetAllProfiles()
@@ -100,10 +162,11 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		prompt := "Для просмотра анкеты отправьте команду: /viewprofile <ID>\n" +
 			"Для редактирования: /editprofile <ID> <поле> <значение>\n" +
 			"Для удаления: /deleteprofilebyid <ID>\n" +
-			"Для добавления валюты:  /addcurrency <ID> <тип валюты> <количество>\n"
+			"Для добавления валюты: /addcurrency <ID> <тип валюты> <количество>\n"
 		fullText := listText + "\n" + prompt
 		msg := tgbotapi.NewMessage(chatID, fullText)
 		bot.Send(msg)
+
 	case "viewprofile":
 		parts := strings.Fields(args)
 		if len(parts) != 1 {
@@ -126,6 +189,7 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		detailText := utils.FormatProfileAdmin(profile)
 		msg := tgbotapi.NewMessage(chatID, detailText)
 		bot.Send(msg)
+
 	case "deleteprofilebyid":
 		parts := strings.Fields(args)
 		if len(parts) != 1 {
@@ -147,6 +211,7 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			msg := tgbotapi.NewMessage(chatID, "Анкета с ID "+strconv.Itoa(id)+" успешно удалена.")
 			bot.Send(msg)
 		}
+
 	case "editprofile":
 		parts := strings.Fields(args)
 		if len(parts) < 3 {
@@ -225,7 +290,6 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 		}
 
 	case "addcurrency":
-		// Ожидается: /addcurrency <ID> <тип валюты> <количество>
 		parts := strings.Fields(args)
 		if len(parts) != 3 {
 			msg := tgbotapi.NewMessage(chatID, "Используйте корректный формат: /addcurrency <ID> <тип валюты> <количество>")
@@ -274,8 +338,66 @@ func HandleAdminUpdate(bot *tgbotapi.BotAPI, update tgbotapi.Update) {
 			"\nОбломки: " + strconv.Itoa(profile.Oblomki)
 		msg := tgbotapi.NewMessage(chatID, responseText)
 		bot.Send(msg)
+
+	case "createevent":
+		parts := strings.Split(args, "|")
+		if len(parts) != 3 {
+			msg := tgbotapi.NewMessage(chatID, "Используйте формат команды: /createevent <название|валюта|количество>")
+			bot.Send(msg)
+			return
+		}
+
+		name := strings.TrimSpace(parts[0])
+		currency := strings.ToLower(strings.TrimSpace(parts[1]))
+		amount, err := strconv.Atoi(strings.TrimSpace(parts[2]))
+		if err != nil {
+			msg := tgbotapi.NewMessage(chatID, "Количество должно быть числом.")
+			bot.Send(msg)
+			return
+		}
+
+		// Создаем объект события
+		event := &models.Event{
+			Name:         name,
+			CurrencyType: currency,
+			Amount:       amount,
+			Active:       true,
+			CreatedAt:    time.Now(),
+		}
+
+		// Сохраняем событие в базе данных
+		err = db.CreateEvent(event)
+		if err != nil {
+			log.Printf("Ошибка создания события: %v", err)
+			msg := tgbotapi.NewMessage(chatID, "Ошибка создания события: "+err.Error())
+			bot.Send(msg)
+			return
+		}
+
+		log.Printf("Создано событие: ID=%d, Название=%s, Валюта=%s, Сумма=%d", event.ID, event.Name, event.CurrencyType, event.Amount)
+
+		// Уведомление для админа
+		msg := tgbotapi.NewMessage(chatID, fmt.Sprintf("Событие создано: \"%s\" (ID: %d)", event.Name, event.ID))
+		bot.Send(msg)
+
+		// Отправляем уведомление всем пользователям
+		notifyText := fmt.Sprintf("Новое событие: \"%s\" (ID: %d)\n"+
+			"Для участия введите: /attend %d\n"+
+			"Для отказа: /unattend %d", event.Name, event.ID, event.ID, event.ID)
+
+		profiles, err := db.GetAllProfiles()
+		if err != nil {
+			log.Printf("Ошибка получения профилей для рассылки: %v", err)
+			return
+		}
+
+		for _, profile := range profiles {
+			notification := tgbotapi.NewMessage(profile.TelegramID, notifyText)
+			bot.Send(notification)
+		}
+
 	default:
-		msg := tgbotapi.NewMessage(chatID, "Неизвестная команда. Доступны: /auth, /help, /allprofiles, /viewprofile, /editprofile, /deleteprofilebyid, /addcurrency")
+		msg := tgbotapi.NewMessage(chatID, "Неизвестная команда. Используйте /help для списка доступных команд.")
 		bot.Send(msg)
 	}
 }
