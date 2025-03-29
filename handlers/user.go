@@ -4,6 +4,7 @@ import (
 	"log"
 	"strconv"
 
+	"fmt"
 	"telegram-bot/db"
 	"telegram-bot/models"
 	"telegram-bot/utils"
@@ -202,7 +203,9 @@ func HandleAttendCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 
 	currentEvent.Participants[userID] = true
 	db.SaveProfile(profile)
-	SendMessage(bot, msg.Chat.ID, "Вы успешно отметились на событие! Валюта начислена.\nВаш профиль:\n"+utils.FormatProfile(profile))
+	SendMessage(bot, msg.Chat.ID, fmt.Sprintf(
+		"Вы успешно приняли участие в событии!\nВаш профиль:\nИмя: %s\nПиастры: %d\nОбломки: %d",
+		profile.Name, profile.Piastres, profile.Oblomki))
 }
 
 // HandleUnattendCommand обрабатывает команду /unattend – отменить отметку на активном ивенте.
